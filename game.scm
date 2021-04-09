@@ -1,5 +1,6 @@
 (use-modules (chickadee)
              (system repl coop-server)
+             (chickadee math rect)
              (chickadee math vector)
              (chickadee graphics font)
              (chickadee graphics texture)
@@ -8,6 +9,8 @@
 (define repl (spawn-coop-repl-server))
 
 (define MOVE-STEP 5)
+(define SCREEN-WIDTH 400)
+(define SCREEN-HEIGHT 600)
 
 (define textures-atlas #f)
 (define enemy-ship-sprite #f)
@@ -25,6 +28,8 @@
                    (cons 'space #f)))
 
 (define (key-press key modifiers repeat?)
+  (if (and (equal? key 'space) (not repeat?))
+      (put-fireball player-position))
   (assoc-set! keys key #t))
 
 (define (key-release key modifiers)
@@ -51,29 +56,43 @@
 (define (draw-fireballs)
   (map (lambda (ball) (draw-sprite fireball ball)) fireballs))
 
-(define (move-fireballs)
-  (set! fireballs (map (lambda (ball) (vec2+ ball (vec2 0 MOVE-STEP))) fireballs)))
+(define (move-upwards coords-vector)
+  (vec2+ coords-vector (vec2 0 MOVE-STEP)))
 
-(define (draw alpha)
-  (let ((text (cond ((assoc-ref keys 'left) "left")
-                    ((assoc-ref keys 'right) "right")
-                    ((assoc-ref keys 'space) "space")
-                    (else "none")))
-        (move-left? (assoc-ref keys 'left))
+(define (outside-view coords-vector)
+  (let ((view-rect (rect 0 0 SCREEN-WIDTH SCREEN-HEIGHT)))
+    (rect-contains-vec2? view-rect coords-vector)))
+
+(define (move-fireballs)
+  (set! fireballs (map move-upwards
+                       (filter outside-view fireballs))))
+
+(define (move-player!)
+  (let ((move-left? (assoc-ref keys 'left))
         (move-right? (assoc-ref keys 'right))
         (move-up? (assoc-ref keys 'up))
-        (move-down? (assoc-ref keys 'down))
-        (fire? (assoc-ref keys 'space)))
+        (move-down? (assoc-ref keys 'down)))
     (set! player-position (vec2+ player-position (player-move-delta move-left?
                                                                     move-right?
                                                                     move-up?
-                                                                    move-down?)))
-    (if fire? (put-fireball player-position))
-    (draw-fireballs)
-    (move-fireballs)
+                                                                    move-down?)))))
+(define (draw-debug)
+  (let ((text (cond ((assoc-ref keys 'left) "left")
+                    ((assoc-ref keys 'right) "right")
+                    ((assoc-ref keys 'space) "space")
+                    (else "none"))))
+
     (draw-text text (vec2 260.0 240.0))
-    (draw-sprite enemy-ship-sprite (vec2 200 290))
-    (draw-sprite player-ship-sprite player-position)))
+    (draw-text (string-append "Fireballs: "
+                              (number->string (length fireballs))) (vec2 280.0 290.0))))
+
+(define (draw alpha)
+  (move-player!)
+  (draw-fireballs)
+  (move-fireballs)
+  (draw-debug)
+  (draw-sprite enemy-ship-sprite (vec2 200 290))
+  (draw-sprite player-ship-sprite player-position))
 
 (define (update dt)
   (poll-coop-repl-server repl))
@@ -81,8 +100,8 @@
 (run-game
  #:load load
  #:update update
- #:window-width 400
- #:window-height 600
+ #:window-width SCREEN-WIDTH
+ #:window-height SCREEN-HEIGHT
  #:key-press key-press
  #:key-release key-release
  #:draw draw)
