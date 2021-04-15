@@ -24,9 +24,11 @@
 (define fireball #f)
 
 (define player-position (vec2 300 0))
+
 (define enemy-y SCREEN-HEIGHT)
 (define enemy-x (/ SCREEN-WIDTH 2))
 
+(define enemy-ships '())
 (define fireballs '())
 
 (define keys (list (cons 'left #f)
@@ -86,33 +88,21 @@
                                                                     move-down?)))))
 
 (define enemy-path
-  (bezier-path
-   (vec2 200 0)
-   (vec2 200 0) (vec2 400 100) (vec2 200 200)
-   (vec2 200 200) (vec2 0 300) (vec2 200 400)
-   (vec2 200 400) (vec2 400 500) (vec2 200 600)))
-
-(define (bezier-path-point-at path t)
-  (let* ((segment-length (/ 1 (length path)))
-         (segment (min (inexact->exact (floor (/ t segment-length))) (- (length path) 1)))
-         (segment-bezier (list-ref path segment))
-         (fraction-in-segment (/ (- t (* segment segment-length)) segment-length)))
-    ;; (display segment-length)
-    ;; (display "\n")
-    ;; (display segment)
-    ;; (display "\n")
-    (display fraction-in-segment)
-    (display "\n")
-    (bezier-curve-point-at segment-bezier fraction-in-segment)))
+  (let ((start-x (/ SCREEN-WIDTH 2))
+        (start-y SCREEN-HEIGHT))
+    (make-bezier-curve
+     (vec2 start-x start-y)
+     (vec2 (- start-x 300) (- start-y 100))
+     (vec2 (+ start-x 300) (- start-y 300))
+     (vec2 start-x (- start-y SCREEN-HEIGHT)))))
 
 (define enemy-script
   (script
-   (tween 1000 0 1
+   (tween 300 0 1
           (lambda (t)
-            (let ((point (bezier-path-point-at enemy-path t)))
+            (let ((point (bezier-curve-point-at enemy-path t)))
               (set! enemy-y (vec2-y point))
-              (set! enemy-x (vec2-x point))))
-          #:ease linear)))
+              (set! enemy-x (vec2-x point)))))))
 
 ;(spawn-script enemy-script)
 (display (script-running? enemy-script))
@@ -135,18 +125,19 @@
 (define bezier1 (make-bezier-curve (vec2 0 0) (vec2 100 100) (vec2 200 200) (vec2 300 300)))
 
 (define (draw alpha)
-  (draw-canvas
-   (make-canvas
-    (with-style ((stroke-color green)
-                 (stroke-width 4.0)
-                 (fill-color green))
-                                        
-                ;(stroke (circle (vec2 100.0 100.0) 50.0))
-                (stroke (path (move-to (vec2 200 0))
-                              (bezier-to (vec2 200 0) (vec2 400 100) (vec2 200 200))
-                              (bezier-to (vec2 200 200) (vec2 0 300) (vec2 200 400))
-                              (bezier-to (vec2 200 400) (vec2 400 500) (vec2 200 600))
-                      (close-path))))))
+  ;; (draw-canvas
+  ;;  (make-canvas
+  ;;   (with-style ((stroke-color green)
+  ;;                (stroke-width 4.0)
+  ;;                (fill-color green))
+  ;;               (stroke
+  ;;                (path
+  ;;                 (move-to (bezier-curve-p0 enemy-path))
+  ;;                 (bezier-to
+  ;;                  (bezier-curve-p1 enemy-path)
+  ;;                  (bezier-curve-p2 enemy-path)
+  ;;                  (bezier-curve-p3 enemy-path)))))))
+  
   (move-player!)
   (draw-fireballs)
   (move-fireballs)
