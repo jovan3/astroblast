@@ -2,9 +2,15 @@
              (system repl coop-server)
              (chickadee math rect)
              (chickadee math vector)
+             (chickadee math bezier)
+             (chickadee math easings)
              (chickadee graphics font)
              (chickadee graphics texture)
-             (chickadee graphics sprite))
+             (chickadee graphics color)
+             (chickadee graphics sprite)
+             (chickadee graphics path)
+             (chickadee scripting))
+
 
 (define repl (spawn-coop-repl-server))
 
@@ -18,6 +24,8 @@
 (define fireball #f)
 
 (define player-position (vec2 300 0))
+(define enemy-y SCREEN-HEIGHT)
+(define enemy-x (/ SCREEN-WIDTH 2))
 
 (define fireballs '())
 
@@ -76,23 +84,79 @@
                                                                     move-right?
                                                                     move-up?
                                                                     move-down?)))))
+
+(define enemy-path
+  (bezier-path
+   (vec2 200 0)
+   (vec2 200 0) (vec2 400 100) (vec2 200 200)
+   (vec2 200 200) (vec2 0 300) (vec2 200 400)
+   (vec2 200 400) (vec2 400 500) (vec2 200 600)))
+
+(define (bezier-path-point-at path t)
+  (let* ((segment-length (/ 1 (length path)))
+         (segment (min (inexact->exact (floor (/ t segment-length))) (- (length path) 1)))
+         (segment-bezier (list-ref path segment))
+         (fraction-in-segment (/ (- t (* segment segment-length)) segment-length)))
+    ;; (display segment-length)
+    ;; (display "\n")
+    ;; (display segment)
+    ;; (display "\n")
+    (display fraction-in-segment)
+    (display "\n")
+    (bezier-curve-point-at segment-bezier fraction-in-segment)))
+
+(define enemy-script
+  (script
+   (tween 1000 0 1
+          (lambda (t)
+            (let ((point (bezier-path-point-at enemy-path t)))
+              (set! enemy-y (vec2-y point))
+              (set! enemy-x (vec2-x point))))
+          #:ease linear)))
+
+;(spawn-script enemy-script)
+(display (script-running? enemy-script))
+
+(define game-world-agenda (make-agenda))
+(with-agenda game-world-agenda
+             (at 10 (enemy-script)))
+
 (define (draw-debug)
   (let ((text (cond ((assoc-ref keys 'left) "left")
                     ((assoc-ref keys 'right) "right")
                     ((assoc-ref keys 'space) "space")
                     (else "none"))))
 
+    (draw-text (number->string (agenda-time)) (vec2 220 220))
     (draw-text text (vec2 260.0 240.0))
     (draw-text (string-append "Fireballs: "
                               (number->string (length fireballs))) (vec2 280.0 290.0))))
 
+(define bezier1 (make-bezier-curve (vec2 0 0) (vec2 100 100) (vec2 200 200) (vec2 300 300)))
+
 (define (draw alpha)
+  (draw-canvas
+   (make-canvas
+    (with-style ((stroke-color green)
+                 (stroke-width 4.0)
+                 (fill-color green))
+                                        
+                ;(stroke (circle (vec2 100.0 100.0) 50.0))
+                (stroke (path (move-to (vec2 200 0))
+                              (bezier-to (vec2 200 0) (vec2 400 100) (vec2 200 200))
+                              (bezier-to (vec2 200 200) (vec2 0 300) (vec2 200 400))
+                              (bezier-to (vec2 200 400) (vec2 400 500) (vec2 200 600))
+                      (close-path))))))
   (move-player!)
   (draw-fireballs)
   (move-fireballs)
   (draw-debug)
-  (draw-sprite enemy-ship-sprite (vec2 200 290))
-  (draw-sprite player-ship-sprite player-position))
+  ;(current-agenda game-world-agenda)
+  (update-agenda 1)
+
+  (draw-sprite enemy-ship-sprite (vec2 enemy-x enemy-y))
+  (draw-sprite player-ship-sprite player-position)
+  )
 
 (define (update dt)
   (poll-coop-repl-server repl))
@@ -105,3 +169,18 @@
  #:key-press key-press
  #:key-release key-release
  #:draw draw)
+
+;;;
+
+(bezier-curve-point-at bezier1 0.5)
+
+(bezier-path (vec2 0 0) (vec2 1 1) (vec2 2 2) (vec2 3 3) (vec2 1 2))
+
+(define bpath1 (bezier-path
+                (vec2 200 0)
+                (vec2 200 0) (vec2 400 100) (vec2 200 200)
+                (vec2 200 200) (vec2 0 300) (vec2 200 400)
+                (vec2 200 400) (vec2 400 500) (vec2 200 600)))
+
+(bezier-curve-point-at (car (cdr bpath1)) 0)
+(first (bezier-curve-point-at bpath1 0))
