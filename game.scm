@@ -1,4 +1,5 @@
 (use-modules (chickadee)
+             (srfi srfi-9)
              (system repl coop-server)
              (chickadee math rect)
              (chickadee math vector)
@@ -24,9 +25,6 @@
 (define fireball #f)
 
 (define player-position (vec2 300 0))
-
-(define enemy-y SCREEN-HEIGHT)
-(define enemy-x (/ SCREEN-WIDTH 2))
 
 (define enemy-ships '())
 (define fireballs '())
@@ -87,6 +85,22 @@
                                                                     move-up?
                                                                     move-down?)))))
 
+(define (make-enemy-path)
+  (let ((start-x (random SCREEN-WIDTH))
+        (start-y SCREEN-HEIGHT)
+        (p1-x (random SCREEN-WIDTH))
+        (p1-y 100)
+        (p2-x (random SCREEN-WIDTH))
+        (p2-y 300)
+        (p3-x (random SCREEN-WIDTH))
+        (p3-y 0))
+
+    (make-bezier-curve
+     (vec2 start-x start-y)
+     (vec2 p1-x p1-y)
+     (vec2 p2-x p2-y)
+     (vec2 p3-x p3-y))))          
+
 (define enemy-path
   (let ((start-x (/ SCREEN-WIDTH 2))
         (start-y SCREEN-HEIGHT))
@@ -96,20 +110,22 @@
      (vec2 (+ start-x 300) (- start-y 300))
      (vec2 start-x (- start-y SCREEN-HEIGHT)))))
 
-(define enemy-script
-  (script
-   (tween 300 0 1
-          (lambda (t)
-            (let ((point (bezier-curve-point-at enemy-path t)))
-              (set! enemy-y (vec2-y point))
-              (set! enemy-x (vec2-x point)))))))
+(define-record-type <enemy-ship>
+  (make-enemy-ship bezier-path current-t)
+  enemy-ship?
+  (bezier-path enemy-ship-path)
+  (current-t enemy-ship-path-t enemy-ship-path-t-set!))
 
-;(spawn-script enemy-script)
-(display (script-running? enemy-script))
+(define spawn-enemy
+  (lambda ()
+    (let ((ship (make-enemy-ship (make-enemy-path) 0)))
+      (display ship)
+      (set! enemy-ships (cons ship enemy-ships)))))
 
-(define game-world-agenda (make-agenda))
-(with-agenda game-world-agenda
-             (at 10 (enemy-script)))
+(at 100 (spawn-enemy))
+(at 300 (spawn-enemy))
+(at 400 (spawn-enemy))
+(at 450 (spawn-enemy))
 
 (define (draw-debug)
   (let ((text (cond ((assoc-ref keys 'left) "left")
@@ -122,21 +138,40 @@
     (draw-text (string-append "Fireballs: "
                               (number->string (length fireballs))) (vec2 280.0 290.0))))
 
-(define bezier1 (make-bezier-curve (vec2 0 0) (vec2 100 100) (vec2 200 200) (vec2 300 300)))
+
+(define (draw-enemies)
+  (for-each (lambda (ship)
+         (let ((ship-position
+                (bezier-curve-point-at
+                 (enemy-ship-path ship) (enemy-ship-path-t ship))))
+           (draw-sprite enemy-ship-sprite ship-position))) enemy-ships))
+
+(define move-enemies
+  (lambda ()
+    (forever
+     (for-each
+      (lambda (enemy)
+        (let ((t (enemy-ship-path-t enemy)))
+          (enemy-ship-path-t-set! enemy (+ t 0.005)))) enemy-ships)
+     (sleep 1))))
+
+(spawn-script move-enemies)
 
 (define (draw alpha)
-  ;; (draw-canvas
-  ;;  (make-canvas
-  ;;   (with-style ((stroke-color green)
-  ;;                (stroke-width 4.0)
-  ;;                (fill-color green))
-  ;;               (stroke
-  ;;                (path
-  ;;                 (move-to (bezier-curve-p0 enemy-path))
-  ;;                 (bezier-to
-  ;;                  (bezier-curve-p1 enemy-path)
-  ;;                  (bezier-curve-p2 enemy-path)
-  ;;                  (bezier-curve-p3 enemy-path)))))))
+  (if (not (nil? enemy-ships))
+      (let ((enemy-path (enemy-ship-path (car enemy-ships))))
+        (draw-canvas
+         (make-canvas
+          (with-style ((stroke-color green)
+                       (stroke-width 4.0)
+                       (fill-color green))
+                      (stroke
+                       (path
+                        (move-to (bezier-curve-p0 enemy-path))
+                        (bezier-to
+                         (bezier-curve-p1 enemy-path)
+                         (bezier-curve-p2 enemy-path)
+                         (bezier-curve-p3 enemy-path)))))))))
   
   (move-player!)
   (draw-fireballs)
@@ -145,9 +180,8 @@
   ;(current-agenda game-world-agenda)
   (update-agenda 1)
 
-  (draw-sprite enemy-ship-sprite (vec2 enemy-x enemy-y))
-  (draw-sprite player-ship-sprite player-position)
-  )
+  (draw-enemies)
+  (draw-sprite player-ship-sprite player-position))
 
 (define (update dt)
   (poll-coop-repl-server repl))
@@ -174,4 +208,4 @@
                 (vec2 200 400) (vec2 400 500) (vec2 200 600)))
 
 (bezier-curve-point-at (car (cdr bpath1)) 0)
-(first (bezier-curve-point-at bpath1 0))
+;(first (bezier-curve-point-at bpath1 0))
