@@ -12,6 +12,7 @@
              (chickadee graphics path)
              (chickadee scripting))
 
+(set! *random-state* (seed->random-state (current-time)))
 
 (define repl (spawn-coop-repl-server))
 
@@ -116,16 +117,18 @@
   (bezier-path enemy-ship-path)
   (current-t enemy-ship-path-t enemy-ship-path-t-set!))
 
-(define spawn-enemy
-  (lambda ()
-    (let ((ship (make-enemy-ship (make-enemy-path) 0)))
+(define (spawn-enemy)
+  (let ((ship (make-enemy-ship (make-enemy-path) 0)))
       (display ship)
-      (set! enemy-ships (cons ship enemy-ships)))))
+      (set! enemy-ships (cons ship enemy-ships))))
 
-(at 100 (spawn-enemy))
-(at 300 (spawn-enemy))
-(at 400 (spawn-enemy))
-(at 450 (spawn-enemy))
+(define spawn-enemies
+  (lambda ()
+    (forever
+     (spawn-enemy)
+     (sleep (+ 1 (random 100))))))
+
+(spawn-script spawn-enemies)
 
 (define (draw-debug)
   (let ((text (cond ((assoc-ref keys 'left) "left")
@@ -194,18 +197,3 @@
  #:key-press key-press
  #:key-release key-release
  #:draw draw)
-
-;;;
-
-(bezier-curve-point-at bezier1 0.5)
-
-(bezier-path (vec2 0 0) (vec2 1 1) (vec2 2 2) (vec2 3 3) (vec2 1 2))
-
-(define bpath1 (bezier-path
-                (vec2 200 0)
-                (vec2 200 0) (vec2 400 100) (vec2 200 200)
-                (vec2 200 200) (vec2 0 300) (vec2 200 400)
-                (vec2 200 400) (vec2 400 500) (vec2 200 600)))
-
-(bezier-curve-point-at (car (cdr bpath1)) 0)
-;(first (bezier-curve-point-at bpath1 0))
