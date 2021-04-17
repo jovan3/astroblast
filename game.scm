@@ -24,7 +24,11 @@
 (define enemy-ship-sprite #f)
 (define player-ship-sprite #f)
 (define fireball #f)
+(define explosion-atlas #f)
 
+(define agenda-dt 1)
+
+(define game-over #f)
 (define player-position (vec2 300 0))
 
 (define enemy-ships '())
@@ -45,10 +49,12 @@
   (assoc-set! keys key #f))
 
 (define (load)
-  (set! textures-atlas (load-tileset "enemy-ships.png" 16 16))
+  (set! textures-atlas (load-tileset "graphics/enemy-ships.png" 16 16))
   (set! enemy-ship-sprite (texture-atlas-ref textures-atlas 0))
-  (set! player-ship-sprite (load-image "ship.png"))
-  (set! fireball (load-image "fire.png")))
+  (set! player-ship-sprite (load-image "graphics/ship.png"))
+  (set! fireball (load-image "graphics/fire.png"))
+
+  (set! explosion-atlas (load-tileset "graphics/explosion.png" 128 128)))
 
 (define (player-move-delta left? right? up? down?)
   (let ((x (cond (left? (- MOVE-STEP))
@@ -117,50 +123,22 @@
   (bezier-path enemy-ship-path)
   (current-t enemy-ship-path-t enemy-ship-path-t-set!))
 
+(define (enemy-ship-position ship)
+  (bezier-curve-point-at
+   (enemy-ship-path ship) (enemy-ship-path-t ship)))
+
 (define (spawn-enemy)
   (let ((ship (make-enemy-ship (make-enemy-path) 0)))
-      (display ship)
       (set! enemy-ships (cons ship enemy-ships))))
 
-(define spawn-enemies
-  (lambda ()
-    (forever
-     (spawn-enemy)
-     (sleep (+ 1 (random 100))))))
+(define (spawn-enemies)
+  (forever
+   (spawn-enemy)
+   (sleep (+ 1 (random 100)))))
 
 (spawn-script spawn-enemies)
 
 (define (draw-debug)
-  (let ((text (cond ((assoc-ref keys 'left) "left")
-                    ((assoc-ref keys 'right) "right")
-                    ((assoc-ref keys 'space) "space")
-                    (else "none"))))
-
-    (draw-text (number->string (agenda-time)) (vec2 220 220))
-    (draw-text text (vec2 260.0 240.0))
-    (draw-text (string-append "Fireballs: "
-                              (number->string (length fireballs))) (vec2 280.0 290.0))))
-
-
-(define (draw-enemies)
-  (for-each (lambda (ship)
-         (let ((ship-position
-                (bezier-curve-point-at
-                 (enemy-ship-path ship) (enemy-ship-path-t ship))))
-           (draw-sprite enemy-ship-sprite ship-position))) enemy-ships))
-
-(define move-enemies
-  (lambda ()
-    (forever
-     (for-each
-      (lambda (enemy)
-        (let ((t (enemy-ship-path-t enemy)))
-          (enemy-ship-path-t-set! enemy (+ t 0.005)))) enemy-ships)
-     (sleep 1))))
-
-(spawn-script move-enemies)
-
-(define (draw alpha)
   (if (not (nil? enemy-ships))
       (let ((enemy-path (enemy-ship-path (car enemy-ships))))
         (draw-canvas
@@ -176,15 +154,81 @@
                          (bezier-curve-p2 enemy-path)
                          (bezier-curve-p3 enemy-path)))))))))
   
+  (let ((text (cond ((assoc-ref keys 'left) "left")
+                    ((assoc-ref keys 'right) "right")
+                    ((assoc-ref keys 'space) "space")
+                    (else "none"))))
+
+    (draw-text (number->string (agenda-time)) (vec2 220 220))
+    (draw-text text (vec2 260.0 240.0))
+    (draw-text (string-append "Fireballs: "
+                              (number->string (length fireballs))) (vec2 280.0 290.0))))
+
+(define (draw-enemies)
+  (for-each
+   
+   (lambda (ship)
+     (let ((ship-position (enemy-ship-position ship)))
+           (draw-sprite enemy-ship-sprite ship-position)))
+     
+     enemy-ships))
+
+(define (move-enemies)
+  (forever
+   (for-each
+    (lambda (enemy)
+      (let ((t (enemy-ship-path-t enemy)))
+        (enemy-ship-path-t-set! enemy (+ t 0.005)))) enemy-ships)
+   (sleep 1)))
+
+(spawn-script move-enemies)
+
+(define (enemy-collides?)
+  (let ((ship-collisions
+         (filter
+          (lambda (enemy)
+            (let* ((enemy-position (enemy-ship-position enemy))
+                   (enemy-rect (rect (vec2-x enemy-position)
+                                     (vec2-y enemy-position)
+                                     16 16))
+                   (player-rect (rect (vec2-x player-position)
+                                      (vec2-y player-position)
+                                      32 24)))
+
+              (rect-intersects? enemy-rect player-rect)))
+
+          enemy-ships)))
+
+    (not (nil? ship-collisions))))
+
+;; (spawn-script (lambda ()
+;;                 (forever
+;;                  (if (enemy-collides?)
+;;                      (set! agenda-dt 0))
+;;                  (sleep 1))))
+
+(at 1
+    (script
+     (wait-until (enemy-collides?))
+     (set! game-over #t)
+     (let ((position (vec2- player-position (vec2 64 64))))
+       (tween 100 0 63
+              (lambda (index)
+                (let ((sprite (inexact->exact (floor index))))
+                  (draw-sprite
+                   (texture-atlas-ref explosion-atlas sprite) position)))))))
+
+(define (draw alpha)
   (move-player!)
   (draw-fireballs)
   (move-fireballs)
-  (draw-debug)
+  ;(draw-debug)
   ;(current-agenda game-world-agenda)
-  (update-agenda 1)
+  (update-agenda agenda-dt)
 
   (draw-enemies)
-  (draw-sprite player-ship-sprite player-position))
+  (if (not game-over)
+      (draw-sprite player-ship-sprite player-position)))
 
 (define (update dt)
   (poll-coop-repl-server repl))
