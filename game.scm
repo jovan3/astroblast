@@ -33,6 +33,7 @@
 
 (define enemy-ships '())
 (define fireballs '())
+(define explosions '())
 
 (define keys (list (cons 'left #f)
                    (cons 'right #f)
@@ -43,6 +44,7 @@
 (define (key-press key modifiers repeat?)
   (if (and (equal? key 'space) (not repeat?))
       (put-fireball player-position))
+      ;(spawn-script (explode (vec2 200 200))))
   (assoc-set! keys key #t))
 
 (define (key-release key modifiers)
@@ -183,7 +185,7 @@
 
 (spawn-script move-enemies)
 
-(define (enemy-collides?)
+(define (player-collides?)
   (let ((ship-collisions
          (filter
           (lambda (enemy)
@@ -201,22 +203,55 @@
 
     (not (nil? ship-collisions))))
 
-;; (spawn-script (lambda ()
-;;                 (forever
-;;                  (if (enemy-collides?)
-;;                      (set! agenda-dt 0))
-;;                  (sleep 1))))
+(define (explode position)
+  (lambda ()
+    (let ((new-position (vec2- position (vec2 64 64))))
+      (tween 100 0 63
+             (lambda (index)
+               (let ((sprite (inexact->exact (floor index))))
+                 (draw-sprite
+                  (texture-atlas-ref explosion-atlas sprite) new-position)))))))
+
+(define (enemy-fireball-collision fireball)
+  (filter
+   (lambda (enemy)
+     (let* ((enemy-position (enemy-ship-position enemy))
+            (enemy-rect (rect (vec2-x enemy-position)
+                              (vec2-y enemy-position)
+                              16 16))
+            (fireball-rect (rect (vec2-x fireball)
+                                 (vec2-y fireball)
+                                 4 3)))
+
+       (rect-intersects? enemy-rect fireball-rect)))
+
+   enemy-ships))
+
+(define (clear-hit-enemies!)
+  (for-each
+   (lambda (fireball)
+     (let ((hit-enemies (enemy-fireball-collision fireball)))
+
+       (for-each
+        (lambda (hit-enemy)
+          (set! enemy-ships (delete hit-enemy enemy-ships))
+          (set! fireballs (delete fireball fireballs))
+          (set! explosions (cons fireball explosions)))
+        hit-enemies)))
+   fireballs))
+        
+(define (clear-hit-enemies-script)
+  (forever
+   (clear-hit-enemies!)
+   (sleep 1)))
+
+(spawn-script clear-hit-enemies-script)
 
 (at 1
     (script
-     (wait-until (enemy-collides?))
+     (wait-until (player-collides?))
      (set! game-over #t)
-     (let ((position (vec2- player-position (vec2 64 64))))
-       (tween 100 0 63
-              (lambda (index)
-                (let ((sprite (inexact->exact (floor index))))
-                  (draw-sprite
-                   (texture-atlas-ref explosion-atlas sprite) position)))))))
+     ((explode player-position))))
 
 (define (draw alpha)
   (move-player!)
