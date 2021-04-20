@@ -250,22 +250,25 @@
 (define (add-explosion position)
   (set! explosions (cons (list position 0) explosions)))
 
-(define (draw-explosions)
+(define (clear-old-explosions!)
+  (set! explosions
+    (filter
+     (lambda (explosion)
+       (< (cadr explosion) 63))
+     explosions)))
+
+(define (draw-explosions!)
   (if (not (nil? explosions))
       (set! explosions
-        (let ((explosions-old-cleared
-               (filter
-                (lambda (explosion)
-                  (< (cadr explosion) 63))
-                explosions)))
-          (map
-           (lambda (explosion)
-             (let* ((original-position (car explosion))
-                    (position (vec2- original-position (vec2 64 64)))
-                    (atlas-index (cadr explosion)))
-               (draw-sprite (texture-atlas-ref explosion-atlas atlas-index) position)
-               (list original-position (+ 1 atlas-index))))
-           explosions-old-cleared)))))
+        (map
+         (lambda (explosion)
+           (let* ((original-position (car explosion))
+                  (position (vec2- original-position (vec2 64 64)))
+                  (atlas-index (cadr explosion)))
+             (draw-sprite (texture-atlas-ref explosion-atlas atlas-index) position)
+             (list original-position (+ 1 atlas-index))))
+
+         explosions))))
 
 (at 1
     (script
@@ -282,7 +285,8 @@
   (update-agenda agenda-dt)
   
   (draw-enemies)
-  (draw-explosions)
+  (clear-old-explosions!)
+  (draw-explosions!)
   (if (not game-over)
       (draw-sprite player-ship-sprite player-position)))
 
