@@ -20,11 +20,12 @@
 (define SCREEN-WIDTH 400)
 (define SCREEN-HEIGHT 600)
 
-(define textures-atlas #f)
-(define enemy-ship-sprite #f)
+(define enemy-ships-textures-atlas #f)
 (define player-ship-sprite #f)
 (define fireball #f)
 (define explosion-atlas #f)
+
+(define background-map #f)
 
 (define agenda-dt 1)
 
@@ -44,18 +45,17 @@
 (define (key-press key modifiers repeat?)
   (if (and (equal? key 'space) (not repeat?))
       (put-fireball player-position))
-      ;(spawn-script (explode (vec2 200 200))))
   (assoc-set! keys key #t))
 
 (define (key-release key modifiers)
   (assoc-set! keys key #f))
 
 (define (load)
-  (set! textures-atlas (load-tileset "graphics/enemy-ships.png" 16 16))
-  (set! enemy-ship-sprite (texture-atlas-ref textures-atlas 0))
+  (set! enemy-ships-textures-atlas (load-tileset "graphics/enemy-ships.png" 16 16))
   (set! player-ship-sprite (load-image "graphics/ship.png"))
   (set! fireball (load-image "graphics/fire.png"))
 
+  (set! background-map (load-image "graphics/space_dn.png"))
   (set! explosion-atlas (load-tileset "graphics/explosion.png" 128 128)))
 
 (define (player-move-delta left? right? up? down?)
@@ -120,17 +120,21 @@
      (vec2 start-x (- start-y SCREEN-HEIGHT)))))
 
 (define-record-type <enemy-ship>
-  (make-enemy-ship bezier-path current-t)
+  (make-enemy-ship bezier-path current-t sprite-index)
   enemy-ship?
   (bezier-path enemy-ship-path)
-  (current-t enemy-ship-path-t enemy-ship-path-t-set!))
+  (current-t enemy-ship-path-t enemy-ship-path-t-set!)
+  (sprite-index enemy-ship-sprite-index))
+
+(define (enemy-ship-sprite index)
+  (texture-atlas-ref enemy-ships-textures-atlas index))
 
 (define (enemy-ship-position ship)
   (bezier-curve-point-at
    (enemy-ship-path ship) (enemy-ship-path-t ship)))
 
 (define (spawn-enemy)
-  (let ((ship (make-enemy-ship (make-enemy-path) 0)))
+  (let ((ship (make-enemy-ship (make-enemy-path) 0 (random 5))))
       (set! enemy-ships (cons ship enemy-ships))))
 
 (define (spawn-enemies)
@@ -170,8 +174,9 @@
   (for-each
    
    (lambda (ship)
-     (let ((ship-position (enemy-ship-position ship)))
-           (draw-sprite enemy-ship-sprite ship-position)))
+     (let* ((ship-position (enemy-ship-position ship))
+            (sprite (enemy-ship-sprite (enemy-ship-sprite-index ship))))
+       (draw-sprite sprite ship-position)))
      
      enemy-ships))
 
@@ -277,13 +282,14 @@
      ((explode player-position))))
 
 (define (draw alpha)
+  (draw-sprite background-map (vec2 0 0) #:rect (rect 0 0 SCREEN-WIDTH SCREEN-HEIGHT))
   (move-player!)
   (draw-fireballs)
   (move-fireballs)
   ;(draw-debug)
   ;(current-agenda game-world-agenda)
   (update-agenda agenda-dt)
-  
+
   (draw-enemies)
   (clear-old-explosions!)
   (draw-explosions!)
