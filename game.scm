@@ -19,13 +19,18 @@
 (define MOVE-STEP 5)
 (define SCREEN-WIDTH 400)
 (define SCREEN-HEIGHT 600)
+(define ROCKET-BLAST-RADIUS 150)
 
 (define enemy-ships-textures-atlas #f)
 (define player-ship-sprite #f)
 (define fireball #f)
 (define explosion-atlas #f)
 
+(define large-explosion-atlas #f)
+
 (define background-map #f)
+
+(define rocket-texture #f)
 
 (define agenda-dt 1)
 
@@ -35,16 +40,20 @@
 (define enemy-ships '())
 (define fireballs '())
 (define explosions '())
+(define rocket #f)
 
 (define keys (list (cons 'left #f)
                    (cons 'right #f)
                    (cons 'up #f)
                    (cons 'down #f)
-                   (cons 'space #f)))
+                   (cons 'space #f)
+                   (cons 'm #f)))
 
 (define (key-press key modifiers repeat?)
   (if (and (equal? key 'space) (not repeat?))
       (put-fireball player-position))
+  (if (and (equal? key 'm) (not repeat?))
+      (put-rocket player-position))
   (assoc-set! keys key #t))
 
 (define (key-release key modifiers)
@@ -55,8 +64,11 @@
   (set! player-ship-sprite (load-image "graphics/ship.png"))
   (set! fireball (load-image "graphics/fire.png"))
 
+  (set! rocket-texture (load-image "graphics/rocket.png"))
+  
   (set! background-map (load-image "graphics/space_dn.png"))
-  (set! explosion-atlas (load-tileset "graphics/explosion.png" 128 128)))
+  (set! explosion-atlas (load-tileset "graphics/explosion.png" 128 128))
+  (set! large-explosion-atlas (load-tileset "graphics/explosion-large.png" 256 256)))
 
 (define (player-move-delta left? right? up? down?)
   (let ((x (cond (left? (- MOVE-STEP))
@@ -69,6 +81,54 @@
 
 (define (put-fireball position)
   (set! fireballs (cons position fireballs)))
+
+(define-record-type <rocket-weapon>
+  (make-rocket-weapon position remaining-fuel)
+  rocket?
+  (position rocket-position rocket-position-set!)
+  (remaining-fuel rocket-fuel rocket-fuel-set!))
+
+(define (put-rocket position)
+  (set! rocket (make-rocket-weapon position 250))) 
+
+(define (draw-rocket)
+  (if rocket
+      (draw-sprite rocket-texture (rocket-position rocket))))
+
+(define (enemies-within-radius center radius)
+  
+  (filter
+   (lambda (enemy)
+     (let* ((position (enemy-ship-position enemy))
+            (enemy-x (vec2-x position))
+            (enemy-y (vec2-y position))
+            (center-x (vec2-x center))
+            (center-y (vec2-y center))
+            (distance-from-center (sqrt
+                                   (+
+                                    (expt (- enemy-x center-x) 2)
+                                    (expt (- enemy-y center-y) 2)))))
+       (< distance-from-center radius)))
+
+   enemy-ships))
+
+(define (explode-rocket)
+  (add-large-explosion (rocket-position rocket))
+  (let ((hit-enemies (enemies-within-radius (rocket-position rocket) ROCKET-BLAST-RADIUS)))
+    (explode-enemies hit-enemies)))
+
+(define (move-rocket)
+  (if rocket
+      (let ((current-position (rocket-position rocket)))
+        (if (> (rocket-fuel rocket) 0)
+            (begin
+              (rocket-position-set! rocket (move-upwards current-position))
+              (rocket-fuel-set! rocket (- (rocket-fuel rocket) MOVE-STEP)))
+
+            (begin
+              (explode-rocket)
+              (set! rocket #f))
+      ))))
 
 (define (draw-fireballs)
   (map (lambda (ball) (draw-sprite fireball ball)) fireballs))
@@ -145,6 +205,15 @@
 (spawn-script spawn-enemies)
 
 (define (draw-debug)
+  (if (not (nil? rocket))
+      (draw-canvas
+       (make-canvas
+        (with-style ((stroke-color green)
+                     (stroke-width 4.0)
+                     (fill-color green))
+                    (stroke
+                      (circle (rocket-position rocket) ROCKET-BLAST-RADIUS))))))
+  
   (if (not (nil? enemy-ships))
       (let ((enemy-path (enemy-ship-path (car enemy-ships))))
         (draw-canvas
@@ -232,17 +301,22 @@
 
    enemy-ships))
 
+(define (explode-enemies enemies)
+  (for-each
+   (lambda (enemy)
+     (set! enemy-ships (delete enemy enemy-ships))
+     (add-explosion (enemy-ship-position enemy)))
+   enemies))
+
 (define (clear-hit-enemies!)
   (for-each
    (lambda (fireball)
      (let ((hit-enemies (enemy-fireball-collision fireball)))
+       (if (not (nil? hit-enemies))
+           (set! fireballs (delete fireball fireballs)))
 
-       (for-each
-        (lambda (hit-enemy)
-          (set! enemy-ships (delete hit-enemy enemy-ships))
-          (set! fireballs (delete fireball fireballs))
-          (add-explosion fireball))
-        hit-enemies)))
+       (explode-enemies hit-enemies)))
+     
    fireballs))
 
 (define (clear-hit-enemies-script)
@@ -252,28 +326,41 @@
 
 (spawn-script clear-hit-enemies-script)
 
+(define-record-type <explosion>
+  (make-explosion position frame texture-atlas)
+  explosion?
+  (position explosion-position explosion-position-set!)
+  (frame explosion-frame explosion-frame-set!)
+  (texture-atlas explosion-texture-atlas))
+
 (define (add-explosion position)
-  (set! explosions (cons (list position 0) explosions)))
+  (set! explosions (cons (make-explosion position 0 explosion-atlas) explosions)))
+
+(define (add-large-explosion position)
+  (set! explosions (cons (make-explosion position 0 large-explosion-atlas) explosions)))
 
 (define (clear-old-explosions!)
   (set! explosions
     (filter
      (lambda (explosion)
-       (< (cadr explosion) 63))
+       (< (explosion-frame explosion) 63))
      explosions)))
 
 (define (draw-explosions!)
   (if (not (nil? explosions))
-      (set! explosions
-        (map
-         (lambda (explosion)
-           (let* ((original-position (car explosion))
-                  (position (vec2- original-position (vec2 64 64)))
-                  (atlas-index (cadr explosion)))
-             (draw-sprite (texture-atlas-ref explosion-atlas atlas-index) position)
-             (list original-position (+ 1 atlas-index))))
+      (for-each
+       (lambda (explosion)
+         (let* ((texture-atlas (explosion-texture-atlas explosion))
+                (draw-offset (if (eq? texture-atlas large-explosion-atlas)
+                                 (vec2 128 128)
+                                 (vec2 64 64)))
+                (original-position (explosion-position explosion))
+                (position (vec2- original-position draw-offset))
+                (atlas-index (explosion-frame explosion)))
+           (draw-sprite (texture-atlas-ref texture-atlas atlas-index) position)
+           (explosion-frame-set! explosion (+ 1 atlas-index))))
 
-         explosions))))
+       explosions)))
 
 (at 1
     (script
@@ -286,10 +373,13 @@
   (move-player!)
   (draw-fireballs)
   (move-fireballs)
+
+  (draw-rocket)
+  (move-rocket)
   ;(draw-debug)
   ;(current-agenda game-world-agenda)
   (update-agenda agenda-dt)
-
+  
   (draw-enemies)
   (clear-old-explosions!)
   (draw-explosions!)
