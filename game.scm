@@ -20,6 +20,7 @@
 (define SCREEN-WIDTH 400)
 (define SCREEN-HEIGHT 600)
 (define ROCKET-BLAST-RADIUS 150)
+(define ROCKET-ARM-PERIOD 300)
 
 (define enemy-ships-textures-atlas #f)
 (define player-ship-sprite #f)
@@ -42,6 +43,8 @@
 (define explosions '())
 (define rocket #f)
 
+(define rocket-last-shot-time 0)
+
 (define keys (list (cons 'left #f)
                    (cons 'right #f)
                    (cons 'up #f)
@@ -53,7 +56,7 @@
   (if (and (equal? key 'space) (not repeat?))
       (put-fireball player-position))
   (if (and (equal? key 'm) (not repeat?))
-      (put-rocket player-position))
+      (fire-rocket))
   (assoc-set! keys key #t))
 
 (define (key-release key modifiers)
@@ -87,6 +90,15 @@
   rocket?
   (position rocket-position rocket-position-set!)
   (remaining-fuel rocket-fuel rocket-fuel-set!))
+
+(define (fire-rocket)
+  (let ((rocket-not-fired (nil? rocket))
+        (rocket-available (> (- (agenda-time) rocket-last-shot-time) ROCKET-ARM-PERIOD)))
+
+    (if (and rocket-not-fired rocket-available)
+        (begin
+          (put-rocket player-position)
+          (set! rocket-last-shot-time (agenda-time))))))
 
 (define (put-rocket position)
   (set! rocket (make-rocket-weapon position 250))) 
@@ -236,6 +248,8 @@
 
     (draw-text (number->string (agenda-time)) (vec2 220 220))
     (draw-text text (vec2 260.0 240.0))
+    (draw-text (string-append "Rocket last shot time: "
+                              (number->string rocket-last-shot-time)) (vec2 190.0 300.0))
     (draw-text (string-append "Fireballs: "
                               (number->string (length fireballs))) (vec2 280.0 290.0))))
 
