@@ -1,3 +1,13 @@
+# Astroblast
+
+A simple space shooter game written in (GNU Guile)[https://www.gnu.org/software/guile/] using the super-awesome game dev toolkit (Chickadee)[https://dthompson.us/projects/chickadee.html].
+
+## Game controlls
+
+- `up/down/right/left arrows` - move the ship
+- `space` - shoot a fireball
+- `m` - fire a missle/rocket
+
 ## Graphics credits:
 
 - elnineo: https://opengameart.org/content/explosion-tilesets

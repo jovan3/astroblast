@@ -216,6 +216,36 @@
 
 (spawn-script spawn-enemies)
 
+(define (hud-rocket-progress)
+  (let* ((time-since-last-shot (- (agenda-time) rocket-last-shot-time))
+         (time-progress (cond
+                         ((= 0 time-since-last-shot) 1)
+                         ((> time-since-last-shot ROCKET-ARM-PERIOD) ROCKET-ARM-PERIOD)
+                         ((<= time-since-last-shot ROCKET-ARM-PERIOD) time-since-last-shot))))
+    (* 42 (/ time-progress ROCKET-ARM-PERIOD)))) 
+
+(define (draw-hud)
+  (let ((bar-color (make-color 1.0 1.0 1.0 0.5))
+        (bar-x (- SCREEN-WIDTH 60))
+        (bar-y 20)
+        (progress (hud-rocket-progress)))
+    (draw-sprite rocket-texture
+                 (vec2 (- bar-x 15) bar-y)
+                 #:scale (vec2 0.7 0.7)
+                 #:rotation 0.9) 
+    (draw-canvas
+     (make-canvas
+      (with-style
+       ((stroke-color bar-color)
+        (stroke-width 2.0)
+        (fill-color bar-color))
+       (superimpose
+        (stroke
+         (rounded-rectangle (vec2 bar-x bar-y) 50 14))
+        (fill
+         (rectangle (vec2 (+ bar-x 4) (+ bar-y 4)) progress 6))))))))
+
+
 (define (draw-debug)
   (if (not (nil? rocket))
       (draw-canvas
@@ -390,8 +420,9 @@
 
   (draw-rocket)
   (move-rocket)
+
+  (draw-hud)
   ;(draw-debug)
-  ;(current-agenda game-world-agenda)
   (update-agenda agenda-dt)
   
   (draw-enemies)
