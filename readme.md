@@ -1,6 +1,6 @@
 # Astroblast
 
-A simple space shooter game written in (GNU Guile)[https://www.gnu.org/software/guile/] using the super-awesome game dev toolkit (Chickadee)[https://dthompson.us/projects/chickadee.html].
+A simple space shooter game written in [GNU Guile](https://www.gnu.org/software/guile/) using the super-awesome game dev toolkit [Chickadee](https://dthompson.us/projects/chickadee.html).
 
 ## Game controlls
 
