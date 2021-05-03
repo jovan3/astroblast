@@ -22,6 +22,8 @@
 (define ROCKET-BLAST-RADIUS 150)
 (define ROCKET-ARM-PERIOD 300)
 
+(define hud-color (make-color 1.0 1.0 1.0 0.5))
+
 (define enemy-ships-textures-atlas #f)
 (define player-ship-sprite #f)
 (define fireball #f)
@@ -44,6 +46,8 @@
 (define rocket #f)
 
 (define rocket-last-shot-time 0)
+
+(define score 0)
 
 (define keys (list (cons 'left #f)
                    (cons 'right #f)
@@ -192,11 +196,12 @@
      (vec2 start-x (- start-y SCREEN-HEIGHT)))))
 
 (define-record-type <enemy-ship>
-  (make-enemy-ship bezier-path current-t sprite-index)
+  (make-enemy-ship bezier-path current-t sprite-index hit-score)
   enemy-ship?
   (bezier-path enemy-ship-path)
   (current-t enemy-ship-path-t enemy-ship-path-t-set!)
-  (sprite-index enemy-ship-sprite-index))
+  (sprite-index enemy-ship-sprite-index)
+  (hit-score enemy-hit-score))
 
 (define (enemy-ship-sprite index)
   (texture-atlas-ref enemy-ships-textures-atlas index))
@@ -206,7 +211,7 @@
    (enemy-ship-path ship) (enemy-ship-path-t ship)))
 
 (define (spawn-enemy)
-  (let ((ship (make-enemy-ship (make-enemy-path) 0 (random 5))))
+  (let ((ship (make-enemy-ship (make-enemy-path) 0 (random 5) 100)))
       (set! enemy-ships (cons ship enemy-ships))))
 
 (define (spawn-enemies)
@@ -224,8 +229,8 @@
                          ((<= time-since-last-shot ROCKET-ARM-PERIOD) time-since-last-shot))))
     (* 42 (/ time-progress ROCKET-ARM-PERIOD)))) 
 
-(define (draw-hud)
-  (let ((bar-color (make-color 1.0 1.0 1.0 0.5))
+(define (draw-hud-rocket-progress)
+  (let ((bar-color hud-color)
         (bar-x (- SCREEN-WIDTH 60))
         (bar-y 20)
         (progress (hud-rocket-progress)))
@@ -245,6 +250,15 @@
         (fill
          (rectangle (vec2 (+ bar-x 4) (+ bar-y 4)) progress 6))))))))
 
+(define (draw-score)
+  (let ((text (string-append "Score: " (number->string score)))
+        (position (vec2 (- SCREEN-WIDTH 120) (- SCREEN-HEIGHT 20))))
+
+    (draw-text text position #:color hud-color)))
+
+(define (draw-hud)
+  (draw-hud-rocket-progress)
+  (draw-score))
 
 (define (draw-debug)
   (if (not (nil? rocket))
@@ -349,6 +363,7 @@
   (for-each
    (lambda (enemy)
      (set! enemy-ships (delete enemy enemy-ships))
+     (set! score (+ score (enemy-hit-score enemy)))
      (add-explosion (enemy-ship-position enemy)))
    enemies))
 
