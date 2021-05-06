@@ -21,12 +21,14 @@
 (define SCREEN-HEIGHT 600)
 (define ROCKET-BLAST-RADIUS 150)
 (define ROCKET-ARM-PERIOD 300)
+(define ENEMY-FIREBAL-SPEED 3)
 
 (define hud-color (make-color 1.0 1.0 1.0 0.5))
 
 (define enemy-ships-textures-atlas #f)
 (define player-ship-sprite #f)
 (define fireball #f)
+(define enemy-fireball #f)
 (define explosion-atlas #f)
 
 (define large-explosion-atlas #f)
@@ -42,12 +44,40 @@
 
 (define enemy-ships '())
 (define fireballs '())
+(define enemy-fireballs '())
 (define explosions '())
 (define rocket #f)
 
 (define rocket-last-shot-time 0)
 
 (define score 0)
+
+(define-record-type <rocket-weapon>
+  (make-rocket-weapon position remaining-fuel)
+  rocket?
+  (position rocket-position rocket-position-set!)
+  (remaining-fuel rocket-fuel rocket-fuel-set!))
+
+(define-record-type <enemy-ship>
+  (make-enemy-ship bezier-path current-t sprite-index hit-score)
+  enemy-ship?
+  (bezier-path enemy-ship-path)
+  (current-t enemy-ship-path-t enemy-ship-path-t-set!)
+  (sprite-index enemy-ship-sprite-index)
+  (hit-score enemy-hit-score))
+
+(define-record-type <explosion>
+  (make-explosion position frame texture-atlas)
+  explosion?
+  (position explosion-position explosion-position-set!)
+  (frame explosion-frame explosion-frame-set!)
+  (texture-atlas explosion-texture-atlas))
+
+(define-record-type <enemy-fireball>
+  (make-enemy-fireball position direction)
+  enemy-fireball?
+  (position enemy-fireball-position enemy-fireball-position-set!)
+  (direction enemy-fireball-direction))
 
 (define keys (list (cons 'left #f)
                    (cons 'right #f)
@@ -70,7 +100,8 @@
   (set! enemy-ships-textures-atlas (load-tileset "graphics/enemy-ships.png" 16 16))
   (set! player-ship-sprite (load-image "graphics/ship.png"))
   (set! fireball (load-image "graphics/fire.png"))
-
+  (set! enemy-fireball (load-image "graphics/enemy-fire.png"))
+  
   (set! rocket-texture (load-image "graphics/rocket.png"))
   
   (set! background-map (load-image "graphics/space_dn.png"))
@@ -89,11 +120,7 @@
 (define (put-fireball position)
   (set! fireballs (cons position fireballs)))
 
-(define-record-type <rocket-weapon>
-  (make-rocket-weapon position remaining-fuel)
-  rocket?
-  (position rocket-position rocket-position-set!)
-  (remaining-fuel rocket-fuel rocket-fuel-set!))
+
 
 (define (fire-rocket)
   (let ((rocket-not-fired (nil? rocket))
@@ -149,6 +176,12 @@
 (define (draw-fireballs)
   (map (lambda (ball) (draw-sprite fireball ball)) fireballs))
 
+(define (draw-enemy-fireballs)
+  (for-each
+   (lambda (ball)
+     (draw-sprite enemy-fireball (enemy-fireball-position ball)))
+   enemy-fireballs))
+
 (define (move-upwards coords-vector)
   (vec2+ coords-vector (vec2 0 MOVE-STEP)))
 
@@ -159,6 +192,17 @@
 (define (move-fireballs)
   (set! fireballs (map move-upwards
                        (filter outside-view fireballs))))
+
+(define (move-enemy-fireball fireball)
+  (let* ((position (enemy-fireball-position fireball))
+         (direction (enemy-fireball-direction fireball)))
+    (enemy-fireball-position-set! fireball
+                                  (vec2+ position (vec2* direction ENEMY-FIREBAL-SPEED)))
+    fireball))
+
+(define (move-enemy-fireballs)
+  (set! enemy-fireballs
+    (map move-enemy-fireball enemy-fireballs)))
 
 (define (move-player!)
   (let ((move-left? (assoc-ref keys 'left))
@@ -195,14 +239,6 @@
      (vec2 (+ start-x 300) (- start-y 300))
      (vec2 start-x (- start-y SCREEN-HEIGHT)))))
 
-(define-record-type <enemy-ship>
-  (make-enemy-ship bezier-path current-t sprite-index hit-score)
-  enemy-ship?
-  (bezier-path enemy-ship-path)
-  (current-t enemy-ship-path-t enemy-ship-path-t-set!)
-  (sprite-index enemy-ship-sprite-index)
-  (hit-score enemy-hit-score))
-
 (define (enemy-ship-sprite index)
   (texture-atlas-ref enemy-ships-textures-atlas index))
 
@@ -219,6 +255,25 @@
    (spawn-enemy)
    (sleep (+ 1 (random 100)))))
 
+(define (spawn-enemy-fireball)
+  (for-each
+   (lambda (ship)
+     (let* ((position (enemy-ship-position ship))
+            (fireball-direction (vec2-normalize (vec2- player-position position)))
+            (fireball (make-enemy-fireball position fireball-direction)))
+
+       ;(display enemy-fireballs)
+       ;(newline)
+       (set! enemy-fireballs (cons fireball enemy-fireballs))))
+
+   enemy-ships))
+
+(define (spawn-enemy-fireballs)
+  (forever
+   (spawn-enemy-fireball)
+   (sleep 300)))
+
+(spawn-script spawn-enemy-fireballs)
 (spawn-script spawn-enemies)
 
 (define (hud-rocket-progress)
@@ -385,13 +440,6 @@
 
 (spawn-script clear-hit-enemies-script)
 
-(define-record-type <explosion>
-  (make-explosion position frame texture-atlas)
-  explosion?
-  (position explosion-position explosion-position-set!)
-  (frame explosion-frame explosion-frame-set!)
-  (texture-atlas explosion-texture-atlas))
-
 (define (add-explosion position)
   (set! explosions (cons (make-explosion position 0 explosion-atlas) explosions)))
 
@@ -430,9 +478,13 @@
 (define (draw alpha)
   (draw-sprite background-map (vec2 0 0) #:rect (rect 0 0 SCREEN-WIDTH SCREEN-HEIGHT))
   (move-player!)
+
   (draw-fireballs)
   (move-fireballs)
 
+  (move-enemy-fireballs)
+  (draw-enemy-fireballs)
+  
   (draw-rocket)
   (move-rocket)
 
