@@ -247,6 +247,18 @@
   (bezier-curve-point-at
    (enemy-ship-path ship) (enemy-ship-path-t ship)))
 
+(define (enemy-ship-rect ship)
+  (let ((enemy-position (enemy-ship-position ship)))
+    (rect (vec2-x enemy-position)
+          (vec2-y enemy-position)
+          16 16)))
+
+(define (enemy-fireball-rect fireball)
+  (let ((position (enemy-fireball-position fireball)))
+    (rect (vec2-x position)
+          (vec2-y position)
+          8 8)))
+
 (define (spawn-enemy)
   (let ((ship (make-enemy-ship (make-enemy-path) 0 (random 5) 100)))
       (set! enemy-ships (cons ship enemy-ships))))
@@ -382,23 +394,29 @@
 
 (spawn-script clear-enemies-outside-view)
 
+(define (object-collides-with-player? object-rect-fn)
+  (lambda (object)
+    (let* ((object-rect (object-rect-fn object))
+           (player-rect (rect (vec2-x player-position)
+                              (vec2-y player-position)
+                              32 24)))
+
+      (rect-intersects? object-rect player-rect))))
+
 (define (player-collides?)
-  (let ((ship-collisions
-         (filter
-          (lambda (enemy)
-            (let* ((enemy-position (enemy-ship-position enemy))
-                   (enemy-rect (rect (vec2-x enemy-position)
-                                     (vec2-y enemy-position)
-                                     16 16))
-                   (player-rect (rect (vec2-x player-position)
-                                      (vec2-y player-position)
-                                      32 24)))
+  (let* ((enemy-collides?
+          (object-collides-with-player? enemy-ship-rect))
+         (ship-collisions
+          (filter enemy-collides? enemy-ships))
 
-              (rect-intersects? enemy-rect player-rect)))
+         (fireball-collides?
+          (object-collides-with-player? enemy-fireball-rect))
+         (fireball-collisions
+          (filter fireball-collides? enemy-fireballs)))
 
-          enemy-ships)))
-
-    (not (nil? ship-collisions))))
+    (or
+     (not (nil? ship-collisions))
+     (not (nil? fireball-collisions)))))
 
 (define (explode position)
   (lambda ()
