@@ -120,8 +120,6 @@
 (define (put-fireball position)
   (set! fireballs (cons position fireballs)))
 
-
-
 (define (fire-rocket)
   (let ((rocket-not-fired (nil? rocket))
         (rocket-available (> (- (agenda-time) rocket-last-shot-time) ROCKET-ARM-PERIOD)))
@@ -185,13 +183,16 @@
 (define (move-upwards coords-vector)
   (vec2+ coords-vector (vec2 0 MOVE-STEP)))
 
-(define (outside-view coords-vector)
-  (let ((view-rect (rect 0 0 SCREEN-WIDTH SCREEN-HEIGHT)))
-    (rect-contains-vec2? view-rect coords-vector)))
+(define (object-inside-view-fn coordinates-extract-pred)
+  (lambda (object)
+    (let ((coordinates (coordinates-extract-pred object))
+          (view-rect (rect 0 0 SCREEN-WIDTH SCREEN-HEIGHT)))
+      (rect-contains-vec2? view-rect coordinates))))
 
 (define (move-fireballs)
-  (set! fireballs (map move-upwards
-                       (filter outside-view fireballs))))
+  (let ((inside-view? (object-inside-view-fn identity)))
+    (set! fireballs (map move-upwards
+                         (filter inside-view? fireballs)))))
 
 (define (move-enemy-fireball fireball)
   (let* ((position (enemy-fireball-position fireball))
@@ -371,6 +372,15 @@
    (sleep 1)))
 
 (spawn-script move-enemies)
+
+(define (clear-enemies-outside-view)
+  (let ((enemy-inside-view?
+         (object-inside-view-fn (lambda (enemy) (enemy-ship-position enemy)))))
+    (forever
+     (set! enemy-ships (filter enemy-inside-view? enemy-ships))
+     (sleep 1))))
+
+(spawn-script clear-enemies-outside-view)
 
 (define (player-collides?)
   (let ((ship-collisions
