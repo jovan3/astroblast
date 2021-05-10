@@ -275,8 +275,6 @@
             (fireball-direction (vec2-normalize (vec2- player-position position)))
             (fireball (make-enemy-fireball position fireball-direction)))
 
-       ;(display enemy-fireballs)
-       ;(newline)
        (set! enemy-fireballs (cons fireball enemy-fireballs))))
 
    enemy-ships))
