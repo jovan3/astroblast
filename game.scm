@@ -202,8 +202,11 @@
     fireball))
 
 (define (move-enemy-fireballs)
-  (set! enemy-fireballs
-    (map move-enemy-fireball enemy-fireballs)))
+  (let ((inside-view? (object-inside-view-fn
+                       (lambda (fireball)
+                         (enemy-fireball-position fireball)))))
+    (set! enemy-fireballs
+          (map move-enemy-fireball (filter inside-view? enemy-fireballs)))))
 
 (define (move-player!)
   (let ((move-left? (assoc-ref keys 'left))
