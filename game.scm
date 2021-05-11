@@ -31,6 +31,8 @@
 (define enemy-fireball #f)
 (define explosion-atlas #f)
 
+(define game-font)
+
 (define large-explosion-atlas #f)
 
 (define background-map #f)
@@ -106,7 +108,9 @@
   
   (set! background-map (load-image "graphics/space_dn.png"))
   (set! explosion-atlas (load-tileset "graphics/explosion.png" 128 128))
-  (set! large-explosion-atlas (load-tileset "graphics/explosion-large.png" 256 256)))
+  (set! large-explosion-atlas (load-tileset "graphics/explosion-large.png" 256 256))
+
+  (set! game-font (load-font "font.otf" 48)))
 
 (define (player-move-delta left? right? up? down?)
   (let ((x (cond (left? (- MOVE-STEP))
@@ -323,11 +327,21 @@
   (let ((text (string-append "Score: " (number->string score)))
         (position (vec2 (- SCREEN-WIDTH 120) (- SCREEN-HEIGHT 20))))
 
-    (draw-text text position #:color hud-color)))
+    (draw-text text position
+               #:color hud-color
+               #:font game-font
+               #:scale (vec2 0.3 0.3))))
 
 (define (draw-hud)
   (draw-hud-rocket-progress)
   (draw-score))
+
+(define (draw-game-end)
+  (let ((text (string-append "Final score: \n" (number->string score)))
+        (position (vec2 (- (/ SCREEN-WIDTH 2) 130) (- (/ SCREEN-HEIGHT 2) 0))))
+    (draw-text text position
+               #:font game-font
+               #:color hud-color)))
 
 (define (draw-debug)
   (if (not (nil? rocket))
@@ -502,7 +516,8 @@
     (script
      (wait-until (player-collides?))
      (set! game-over #t)
-     ((explode player-position))))
+     ((explode player-position))
+     (set! agenda-dt 0)))
 
 (define (draw alpha)
   (draw-sprite background-map (vec2 0 0) #:rect (rect 0 0 SCREEN-WIDTH SCREEN-HEIGHT))
@@ -520,7 +535,8 @@
   (draw-hud)
   ;(draw-debug)
   (update-agenda agenda-dt)
-  
+
+  (if game-over (draw-game-end))
   (draw-enemies)
   (clear-old-explosions!)
   (draw-explosions!)
