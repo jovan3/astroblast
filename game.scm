@@ -22,6 +22,7 @@
 (define ROCKET-BLAST-RADIUS 150)
 (define ROCKET-ARM-PERIOD 300)
 (define ENEMY-FIREBAL-SPEED 3)
+(define FIREBALL-OFFSET (vec2 16 0))
 
 (define hud-color (make-color 1.0 1.0 1.0 0.5))
 
@@ -90,7 +91,7 @@
 
 (define (key-press key modifiers repeat?)
   (if (and (equal? key 'space) (not repeat?))
-      (put-fireball player-position))
+      (put-fireball (vec2+ FIREBALL-OFFSET player-position)))
   (if (and (equal? key 'm) (not repeat?))
       (fire-rocket))
   (assoc-set! keys key #t))
@@ -288,6 +289,10 @@
 
 (define (spawn-enemy-fireballs)
   (forever
+   (spawn-enemy-fireball)
+   (sleep 20)
+   (spawn-enemy-fireball)
+   (sleep 20)
    (spawn-enemy-fireball)
    (sleep 300)))
 
