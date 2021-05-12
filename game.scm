@@ -43,7 +43,7 @@
 (define agenda-dt 1)
 
 (define game-over #f)
-(define player-position (vec2 300 0))
+(define player-position (vec2 (/ SCREEN-WIDTH 2) 20))
 
 (define enemy-ships '())
 (define fireballs '())
