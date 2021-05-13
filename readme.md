@@ -7,6 +7,7 @@ A simple space shooter game written in [GNU Guile](https://www.gnu.org/software/
 - `up/down/right/left arrows` - move the ship
 - `space` - shoot a fireball
 - `m` - fire a missle/rocket
+- `r` - restart the game when the player's ship is destroyed
 
 ## Graphics credits:
 

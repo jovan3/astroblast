@@ -23,6 +23,7 @@
 (define ROCKET-ARM-PERIOD 300)
 (define ENEMY-FIREBAL-SPEED 3)
 (define FIREBALL-OFFSET (vec2 16 0))
+(define INITIAL-PLAYER-POSITION (vec2 (/ SCREEN-WIDTH 2) 20))
 
 (define hud-color (make-color 1.0 1.0 1.0 0.5))
 
@@ -43,7 +44,7 @@
 (define agenda-dt 1)
 
 (define game-over #f)
-(define player-position (vec2 (/ SCREEN-WIDTH 2) 20))
+(define player-position INITIAL-PLAYER-POSITION)
 
 (define enemy-ships '())
 (define fireballs '())
@@ -94,6 +95,8 @@
       (put-fireball (vec2+ FIREBALL-OFFSET player-position)))
   (if (and (equal? key 'm) (not repeat?))
       (fire-rocket))
+  (if (and (equal? key 'r))
+      (reset-game))
   (assoc-set! keys key #t))
 
 (define (key-release key modifiers)
@@ -112,6 +115,16 @@
   (set! large-explosion-atlas (load-tileset "graphics/explosion-large.png" 256 256))
 
   (set! game-font (load-font "font.otf" 48)))
+
+(define (reset-game)
+  (if game-over
+      (begin
+        (set! player-position INITIAL-PLAYER-POSITION)
+        (set! enemy-ships '())
+        (set! enemy-fireballs '())
+        (set! agenda-dt 1)
+        (set! score 0)
+        (set! game-over #f))))
 
 (define (player-move-delta left? right? up? down?)
   (let ((x (cond (left? (- MOVE-STEP))
@@ -294,7 +307,7 @@
    (spawn-enemy-fireball)
    (sleep 20)
    (spawn-enemy-fireball)
-   (sleep 300)))
+   (sleep 100)))
 
 (spawn-script spawn-enemy-fireballs)
 (spawn-script spawn-enemies)
@@ -438,15 +451,6 @@
      (not (nil? ship-collisions))
      (not (nil? fireball-collisions)))))
 
-(define (explode position)
-  (lambda ()
-    (let ((new-position (vec2- position (vec2 64 64))))
-      (tween 100 0 63
-             (lambda (index)
-               (let ((sprite (inexact->exact (floor index))))
-                 (draw-sprite
-                  (texture-atlas-ref explosion-atlas sprite) new-position)))))))
-
 (define (enemy-fireball-collision fireball)
   (filter
    (lambda (enemy)
@@ -519,10 +523,12 @@
 
 (at 1
     (script
-     (wait-until (player-collides?))
-     (set! game-over #t)
-     ((explode player-position))
-     (set! agenda-dt 0)))
+     (forever
+      (wait-until (player-collides?))
+      (add-explosion player-position)
+      (sleep 1)
+      (set! game-over #t)
+      (set! agenda-dt 0))))
 
 (define (draw alpha)
   (draw-sprite background-map (vec2 0 0) #:rect (rect 0 0 SCREEN-WIDTH SCREEN-HEIGHT))
