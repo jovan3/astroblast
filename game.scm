@@ -19,18 +19,20 @@
 (define MOVE-STEP 5)
 (define SCREEN-WIDTH 400)
 (define SCREEN-HEIGHT 600)
-(define ROCKET-BLAST-RADIUS 150)
+(define ROCKET-BLAST-RADIUS 400)
 (define ROCKET-ARM-PERIOD 300)
 (define ENEMY-FIREBAL-SPEED 3)
 (define FIREBALL-OFFSET (vec2 16 0))
 (define INITIAL-PLAYER-POSITION (vec2 (/ SCREEN-WIDTH 2) 20))
 
 (define hud-color (make-color 1.0 1.0 1.0 0.5))
+(define upgrade-color hud-color)
 
 (define enemy-ships-textures-atlas #f)
 (define player-ship-sprite #f)
-(define fireball #f)
-(define enemy-fireball #f)
+(define fireball-texture #f)
+(define enemy-fireball-texture #f)
+(define upgrade-texture #f)
 (define explosion-atlas #f)
 
 (define game-font)
@@ -55,6 +57,8 @@
 (define rocket-last-shot-time 0)
 
 (define score 0)
+(define player-ship-upgrades '())
+(define flying-upgrades '())
 
 (define-record-type <rocket-weapon>
   (make-rocket-weapon position remaining-fuel)
@@ -77,11 +81,17 @@
   (frame explosion-frame explosion-frame-set!)
   (texture-atlas explosion-texture-atlas))
 
-(define-record-type <enemy-fireball>
-  (make-enemy-fireball position direction)
-  enemy-fireball?
-  (position enemy-fireball-position enemy-fireball-position-set!)
-  (direction enemy-fireball-direction))
+(define-record-type <fireball>
+  (make-fireball position direction)
+  fireball?
+  (position fireball-position fireball-position-set!)
+  (direction fireball-direction))
+
+(define-record-type <upgrade>
+  (make-upgrade position type)
+  upgrade?
+  (position upgrade-position upgrade-position-set!)
+  (type upgrade-type))
 
 (define keys (list (cons 'left #f)
                    (cons 'right #f)
@@ -92,7 +102,7 @@
 
 (define (key-press key modifiers repeat?)
   (if (and (equal? key 'space) (not repeat?))
-      (put-fireball (vec2+ FIREBALL-OFFSET player-position)))
+      (fire (vec2+ FIREBALL-OFFSET player-position)))
   (if (and (equal? key 'm) (not repeat?))
       (fire-rocket))
   (if (and (equal? key 'r))
@@ -105,8 +115,8 @@
 (define (load)
   (set! enemy-ships-textures-atlas (load-tileset "graphics/enemy-ships.png" 16 16))
   (set! player-ship-sprite (load-image "graphics/ship.png"))
-  (set! fireball (load-image "graphics/fire.png"))
-  (set! enemy-fireball (load-image "graphics/enemy-fire.png"))
+  (set! fireball-texture (load-image "graphics/fire.png"))
+  (set! enemy-fireball-texture (load-image "graphics/enemy-fire.png"))
   
   (set! rocket-texture (load-image "graphics/rocket.png"))
   
@@ -114,16 +124,21 @@
   (set! explosion-atlas (load-tileset "graphics/explosion.png" 128 128))
   (set! large-explosion-atlas (load-tileset "graphics/explosion-large.png" 256 256))
 
+  (set! upgrade-texture (load-image "graphics/upgrade.png"))
+  
   (set! game-font (load-font "font.otf" 48)))
 
 (define (reset-game)
   (if game-over
       (begin
+        (current-agenda (make-agenda))
+        (spawn-scripts)
         (set! player-position INITIAL-PLAYER-POSITION)
         (set! enemy-ships '())
         (set! enemy-fireballs '())
         (set! agenda-dt 1)
         (set! score 0)
+        (set! player-ship-upgrades '())
         (set! game-over #f))))
 
 (define (player-move-delta left? right? up? down?)
@@ -135,8 +150,21 @@
                  (else 0))))
     (vec2 x y)))
 
+(define (fire position)
+  (if (member 'multi-fireballs player-ship-upgrades)
+      (put-multi-fireballs position)
+      (put-fireball position)))
+
 (define (put-fireball position)
-  (set! fireballs (cons position fireballs)))
+  (let ((new-fireball (make-fireball position (vec2 0 1))))
+    (set! fireballs (cons new-fireball fireballs))))
+
+(define (put-multi-fireballs position)
+  (for-each
+   (lambda (direction)
+     (let ((new-fireball (make-fireball position direction)))
+       (set! fireballs (cons new-fireball fireballs))))
+   (list (vec2 0 1) (vec2 0.03 1) (vec2 -0.03 1))))
 
 (define (fire-rocket)
   (let ((rocket-not-fired (nil? rocket))
@@ -178,28 +206,31 @@
 
 (define (move-rocket)
   (if rocket
-      (let ((current-position (rocket-position rocket)))
-        (if (> (rocket-fuel rocket) 0)
-            (begin
-              (rocket-position-set! rocket (move-upwards current-position))
-              (rocket-fuel-set! rocket (- (rocket-fuel rocket) MOVE-STEP)))
+      (if (> (rocket-fuel rocket) 0)
+          (begin
+            (move-upwards rocket rocket-position rocket-position-set!)
+            (rocket-fuel-set! rocket (- (rocket-fuel rocket) MOVE-STEP)))
 
-            (begin
-              (explode-rocket)
-              (set! rocket #f))
-      ))))
+          (begin
+            (explode-rocket)
+            (set! rocket #f)))))
 
 (define (draw-fireballs)
-  (map (lambda (ball) (draw-sprite fireball ball)) fireballs))
+  (for-each
+   (lambda (ball)
+     (draw-sprite fireball-texture (fireball-position ball)))
+   fireballs))
 
 (define (draw-enemy-fireballs)
   (for-each
    (lambda (ball)
-     (draw-sprite enemy-fireball (enemy-fireball-position ball)))
+     (draw-sprite enemy-fireball-texture (fireball-position ball)))
    enemy-fireballs))
 
-(define (move-upwards coords-vector)
-  (vec2+ coords-vector (vec2 0 MOVE-STEP)))
+(define (move-upwards object position-fn position-set-fn)
+  (let ((coordinates (position-fn object)))
+    (position-set-fn object (vec2+ coordinates (vec2 0 MOVE-STEP)))
+    object))
 
 (define (object-inside-view-fn coordinates-extract-pred)
   (lambda (object)
@@ -208,21 +239,20 @@
       (rect-contains-vec2? view-rect coordinates))))
 
 (define (move-fireballs)
-  (let ((inside-view? (object-inside-view-fn identity)))
-    (set! fireballs (map move-upwards
-                         (filter inside-view? fireballs)))))
+  (let* ((inside-view? (object-inside-view-fn fireball-position))
+         (fireballs-inside-view (filter inside-view? fireballs)))
+         
+    (set! fireballs (map move-enemy-fireball fireballs-inside-view))))
 
 (define (move-enemy-fireball fireball)
-  (let* ((position (enemy-fireball-position fireball))
-         (direction (enemy-fireball-direction fireball)))
-    (enemy-fireball-position-set! fireball
-                                  (vec2+ position (vec2* direction ENEMY-FIREBAL-SPEED)))
+  (let* ((position (fireball-position fireball))
+         (direction (fireball-direction fireball)))
+    (fireball-position-set! fireball
+                            (vec2+ position (vec2* direction ENEMY-FIREBAL-SPEED)))
     fireball))
 
 (define (move-enemy-fireballs)
-  (let ((inside-view? (object-inside-view-fn
-                       (lambda (fireball)
-                         (enemy-fireball-position fireball)))))
+  (let ((inside-view? (object-inside-view-fn fireball-position)))
     (set! enemy-fireballs
           (map move-enemy-fireball (filter inside-view? enemy-fireballs)))))
 
@@ -275,10 +305,16 @@
           16 16)))
 
 (define (enemy-fireball-rect fireball)
-  (let ((position (enemy-fireball-position fireball)))
+  (let ((position (fireball-position fireball)))
     (rect (vec2-x position)
           (vec2-y position)
           8 8)))
+
+(define (upgrade-rect upgrade)
+  (let ((position (upgrade-position upgrade)))
+    (rect (vec2-x position)
+          (vec2-y position)
+          32 32)))
 
 (define (spawn-enemy)
   (let ((ship (make-enemy-ship (make-enemy-path) 0 (random 5) 100)))
@@ -294,7 +330,7 @@
    (lambda (ship)
      (let* ((position (enemy-ship-position ship))
             (fireball-direction (vec2-normalize (vec2- player-position position)))
-            (fireball (make-enemy-fireball position fireball-direction)))
+            (fireball (make-fireball position fireball-direction)))
 
        (set! enemy-fireballs (cons fireball enemy-fireballs))))
 
@@ -309,8 +345,6 @@
    (spawn-enemy-fireball)
    (sleep 100)))
 
-(spawn-script spawn-enemy-fireballs)
-(spawn-script spawn-enemies)
 
 (define (hud-rocket-progress)
   (let* ((time-since-last-shot (- (agenda-time) rocket-last-shot-time))
@@ -416,16 +450,12 @@
         (enemy-ship-path-t-set! enemy (+ t 0.005)))) enemy-ships)
    (sleep 1)))
 
-(spawn-script move-enemies)
-
 (define (clear-enemies-outside-view)
   (let ((enemy-inside-view?
-         (object-inside-view-fn (lambda (enemy) (enemy-ship-position enemy)))))
+         (object-inside-view-fn enemy-ship-position)))
     (forever
      (set! enemy-ships (filter enemy-inside-view? enemy-ships))
      (sleep 1))))
-
-(spawn-script clear-enemies-outside-view)
 
 (define (object-collides-with-player? object-rect-fn)
   (lambda (object)
@@ -455,11 +485,12 @@
   (filter
    (lambda (enemy)
      (let* ((enemy-position (enemy-ship-position enemy))
+            (fireball-position (fireball-position fireball))
             (enemy-rect (rect (vec2-x enemy-position)
                               (vec2-y enemy-position)
                               16 16))
-            (fireball-rect (rect (vec2-x fireball)
-                                 (vec2-y fireball)
+            (fireball-rect (rect (vec2-x fireball-position)
+                                 (vec2-y fireball-position)
                                  4 3)))
 
        (rect-intersects? enemy-rect fireball-rect)))
@@ -490,7 +521,37 @@
    (clear-hit-enemies!)
    (sleep 1)))
 
-(spawn-script clear-hit-enemies-script)
+(define (upgrade-collect-script)
+  (forever
+   (let* ((player-touches-upgrade? (object-collides-with-player? upgrade-rect))
+          (collected-upgrades (filter player-touches-upgrade? flying-upgrades)))
+     (if (not (nil? collected-upgrades))
+         (for-each
+          (lambda (upgrade)
+            (set! flying-upgrades (delete upgrade flying-upgrades))
+            (set! player-ship-upgrades (cons (upgrade-type upgrade) player-ship-upgrades))
+            (add-explosion player-position))
+          collected-upgrades))
+     (sleep 1))))
+
+(define (move-upgrades)
+  (forever
+   (for-each
+    (lambda (upgrade)
+      (upgrade-position-set! upgrade (vec2+ (vec2 0 -1) (upgrade-position upgrade))))
+    flying-upgrades)
+      
+   (sleep 1)))
+
+
+(define (clear-upgrades-outside-view)
+  (let ((upgrade-inside-view?
+         (object-inside-view-fn (object-inside-view-fn
+                                 (lambda (upgrade-item)
+                                   (upgrade-position upgrade-item))))))
+    (forever
+     (set! flying-upgrades (filter upgrade-inside-view? flying-upgrades))
+     (sleep 1))))
 
 (define (add-explosion position)
   (set! explosions (cons (make-explosion position 0 explosion-atlas) explosions)))
@@ -521,7 +582,22 @@
 
        explosions)))
 
-(at 1
+(define (draw-upgrade)
+  (for-each
+   (lambda (upgrade)
+     (draw-sprite upgrade-texture (upgrade-position upgrade) #:tint upgrade-color))
+   flying-upgrades))
+
+(define (spawn-scripts)
+  (spawn-script move-enemies)
+  (spawn-script spawn-enemy-fireballs)
+  (spawn-script clear-hit-enemies-script)
+  (spawn-script clear-enemies-outside-view)
+  (spawn-script upgrade-collect-script)
+  (spawn-script move-upgrades)
+  (spawn-script spawn-enemies)
+
+  (at 1
     (script
      (forever
       (wait-until (player-collides?))
@@ -530,10 +606,18 @@
       (set! game-over #t)
       (set! agenda-dt 0))))
 
+  (at 1000
+    (script
+     (let* ((x-pos (random SCREEN-WIDTH))
+            (new-upgrade (make-upgrade (vec2 x-pos (- SCREEN-HEIGHT 40)) 'multi-fireballs)))
+     (set! flying-upgrades (cons new-upgrade flying-upgrades))))))
+
+(spawn-scripts)
+
 (define (draw alpha)
   (draw-sprite background-map (vec2 0 0) #:rect (rect 0 0 SCREEN-WIDTH SCREEN-HEIGHT))
   (move-player!)
-
+  
   (draw-fireballs)
   (move-fireballs)
 
@@ -543,6 +627,8 @@
   (draw-rocket)
   (move-rocket)
 
+  (draw-upgrade)
+  
   (draw-hud)
   ;(draw-debug)
   (update-agenda agenda-dt)

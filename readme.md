@@ -14,3 +14,4 @@ A simple space shooter game written in [GNU Guile](https://www.gnu.org/software/
 - elnineo: https://opengameart.org/content/explosion-tilesets
 - surt: https://opengameart.org/content/modular-ships
 - font: https://www.fontspace.com/glametrix-font-f16913
+- Wolfgang Wozniak: https://opengameart.org/content/powerup-bubble
