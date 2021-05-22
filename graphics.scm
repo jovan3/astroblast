@@ -1,6 +1,7 @@
 (define-module (graphics)
   #:use-module (chickadee graphics font)
   #:use-module (chickadee graphics texture)
+  #:use-module (chickadee graphics color)
 
   #:export (load-textures
             player-ship-sprite
@@ -15,7 +16,10 @@
             rocket-texture
             enemy-ships-textures-atlas
             
-            game-font))
+            game-font
+
+            hud-color
+            upgrade-color))
              
 
 (define (load-textures)
@@ -48,3 +52,6 @@
 (define background-map #f)
 
 (define rocket-texture #f)
+
+(define hud-color (make-color 1.0 1.0 1.0 0.5))
+(define upgrade-color hud-color)
