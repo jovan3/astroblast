@@ -126,7 +126,7 @@
 
   (set! upgrade-texture (load-image "graphics/upgrade.png"))
   
-  (set! game-font (load-font "font.otf" 48)))
+  (set! game-font (load-font "font.otf" 32)))
 
 (define (reset-game)
   (if game-over
