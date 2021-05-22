@@ -1,24 +1,29 @@
 (use-modules (chickadee)
              (srfi srfi-9)
              (system repl coop-server)
+
              (chickadee math rect)
              (chickadee math vector)
-             (chickadee math bezier)
              (chickadee math easings)
+             (chickadee math bezier)
+             
              (chickadee graphics font)
              (chickadee graphics texture)
              (chickadee graphics color)
              (chickadee graphics sprite)
              (chickadee graphics path)
-             (chickadee scripting))
+
+             (chickadee scripting)
+
+             (util)
+             (enemies)
+             (graphics))
 
 (set! *random-state* (seed->random-state (current-time)))
 
 (define repl (spawn-coop-repl-server))
 
 (define MOVE-STEP 5)
-(define SCREEN-WIDTH 400)
-(define SCREEN-HEIGHT 600)
 (define ROCKET-BLAST-RADIUS 400)
 (define ROCKET-ARM-PERIOD 300)
 (define ENEMY-FIREBAL-SPEED 3)
@@ -28,29 +33,14 @@
 (define hud-color (make-color 1.0 1.0 1.0 0.5))
 (define upgrade-color hud-color)
 
-(define enemy-ships-textures-atlas #f)
-(define player-ship-sprite #f)
-(define fireball-texture #f)
-(define enemy-fireball-texture #f)
-(define upgrade-texture #f)
-(define explosion-atlas #f)
-
-(define game-font)
-
-(define large-explosion-atlas #f)
-
-(define background-map #f)
-
-(define rocket-texture #f)
-
 (define agenda-dt 1)
 
 (define game-over #f)
 (define player-position INITIAL-PLAYER-POSITION)
 
-(define enemy-ships '())
 (define fireballs '())
 (define enemy-fireballs '())
+
 (define explosions '())
 (define rocket #f)
 
@@ -65,14 +55,6 @@
   rocket?
   (position rocket-position rocket-position-set!)
   (remaining-fuel rocket-fuel rocket-fuel-set!))
-
-(define-record-type <enemy-ship>
-  (make-enemy-ship bezier-path current-t sprite-index hit-score)
-  enemy-ship?
-  (bezier-path enemy-ship-path)
-  (current-t enemy-ship-path-t enemy-ship-path-t-set!)
-  (sprite-index enemy-ship-sprite-index)
-  (hit-score enemy-hit-score))
 
 (define-record-type <explosion>
   (make-explosion position frame texture-atlas)
@@ -113,20 +95,7 @@
   (assoc-set! keys key #f))
 
 (define (load)
-  (set! enemy-ships-textures-atlas (load-tileset "graphics/enemy-ships.png" 16 16))
-  (set! player-ship-sprite (load-image "graphics/ship.png"))
-  (set! fireball-texture (load-image "graphics/fire.png"))
-  (set! enemy-fireball-texture (load-image "graphics/enemy-fire.png"))
-  
-  (set! rocket-texture (load-image "graphics/rocket.png"))
-  
-  (set! background-map (load-image "graphics/space_dn.png"))
-  (set! explosion-atlas (load-tileset "graphics/explosion.png" 128 128))
-  (set! large-explosion-atlas (load-tileset "graphics/explosion-large.png" 256 256))
-
-  (set! upgrade-texture (load-image "graphics/upgrade.png"))
-  
-  (set! game-font (load-font "font.otf" 32)))
+  (load-textures))
 
 (define (reset-game)
   (if game-over
@@ -182,23 +151,6 @@
   (if rocket
       (draw-sprite rocket-texture (rocket-position rocket))))
 
-(define (enemies-within-radius center radius)
-  
-  (filter
-   (lambda (enemy)
-     (let* ((position (enemy-ship-position enemy))
-            (enemy-x (vec2-x position))
-            (enemy-y (vec2-y position))
-            (center-x (vec2-x center))
-            (center-y (vec2-y center))
-            (distance-from-center (sqrt
-                                   (+
-                                    (expt (- enemy-x center-x) 2)
-                                    (expt (- enemy-y center-y) 2)))))
-       (< distance-from-center radius)))
-
-   enemy-ships))
-
 (define (explode-rocket)
   (add-large-explosion (rocket-position rocket))
   (let ((hit-enemies (enemies-within-radius (rocket-position rocket) ROCKET-BLAST-RADIUS)))
@@ -232,12 +184,6 @@
     (position-set-fn object (vec2+ coordinates (vec2 0 MOVE-STEP)))
     object))
 
-(define (object-inside-view-fn coordinates-extract-pred)
-  (lambda (object)
-    (let ((coordinates (coordinates-extract-pred object))
-          (view-rect (rect 0 0 SCREEN-WIDTH SCREEN-HEIGHT)))
-      (rect-contains-vec2? view-rect coordinates))))
-
 (define (move-fireballs)
   (let* ((inside-view? (object-inside-view-fn fireball-position))
          (fireballs-inside-view (filter inside-view? fireballs)))
@@ -264,39 +210,7 @@
     (set! player-position (vec2+ player-position (player-move-delta move-left?
                                                                     move-right?
                                                                     move-up?
-                                                                    move-down?)))))
-
-(define (make-enemy-path)
-  (let ((start-x (random SCREEN-WIDTH))
-        (start-y SCREEN-HEIGHT)
-        (p1-x (random SCREEN-WIDTH))
-        (p1-y 100)
-        (p2-x (random SCREEN-WIDTH))
-        (p2-y 300)
-        (p3-x (random SCREEN-WIDTH))
-        (p3-y 0))
-
-    (make-bezier-curve
-     (vec2 start-x start-y)
-     (vec2 p1-x p1-y)
-     (vec2 p2-x p2-y)
-     (vec2 p3-x p3-y))))          
-
-(define enemy-path
-  (let ((start-x (/ SCREEN-WIDTH 2))
-        (start-y SCREEN-HEIGHT))
-    (make-bezier-curve
-     (vec2 start-x start-y)
-     (vec2 (- start-x 300) (- start-y 100))
-     (vec2 (+ start-x 300) (- start-y 300))
-     (vec2 start-x (- start-y SCREEN-HEIGHT)))))
-
-(define (enemy-ship-sprite index)
-  (texture-atlas-ref enemy-ships-textures-atlas index))
-
-(define (enemy-ship-position ship)
-  (bezier-curve-point-at
-   (enemy-ship-path ship) (enemy-ship-path-t ship)))
+                                                                    move-down?)))))          
 
 (define (enemy-ship-rect ship)
   (let ((enemy-position (enemy-ship-position ship)))
@@ -316,9 +230,7 @@
           (vec2-y position)
           32 32)))
 
-(define (spawn-enemy)
-  (let ((ship (make-enemy-ship (make-enemy-path) 0 (random 5) 100)))
-      (set! enemy-ships (cons ship enemy-ships))))
+
 
 (define (spawn-enemies)
   (forever
@@ -406,7 +318,7 @@
                       (circle (rocket-position rocket) ROCKET-BLAST-RADIUS))))))
   
   (if (not (nil? enemy-ships))
-      (let ((enemy-path (enemy-ship-path (car enemy-ships))))
+      (let ((enemy-path (enemy-bezier-path (car enemy-ships))))
         (draw-canvas
          (make-canvas
           (with-style ((stroke-color green)
@@ -432,30 +344,6 @@
     (draw-text (string-append "Fireballs: "
                               (number->string (length fireballs))) (vec2 280.0 290.0))))
 
-(define (draw-enemies)
-  (for-each
-   
-   (lambda (ship)
-     (let* ((ship-position (enemy-ship-position ship))
-            (sprite (enemy-ship-sprite (enemy-ship-sprite-index ship))))
-       (draw-sprite sprite ship-position)))
-     
-     enemy-ships))
-
-(define (move-enemies)
-  (forever
-   (for-each
-    (lambda (enemy)
-      (let ((t (enemy-ship-path-t enemy)))
-        (enemy-ship-path-t-set! enemy (+ t 0.005)))) enemy-ships)
-   (sleep 1)))
-
-(define (clear-enemies-outside-view)
-  (let ((enemy-inside-view?
-         (object-inside-view-fn enemy-ship-position)))
-    (forever
-     (set! enemy-ships (filter enemy-inside-view? enemy-ships))
-     (sleep 1))))
 
 (define (object-collides-with-player? object-rect-fn)
   (lambda (object)
@@ -501,7 +389,7 @@
   (for-each
    (lambda (enemy)
      (set! enemy-ships (delete enemy enemy-ships))
-     (set! score (+ score (enemy-hit-score enemy)))
+     (set! score (+ score (enemy-destroyed-points enemy)))
      (add-explosion (enemy-ship-position enemy)))
    enemies))
 
