@@ -1,3 +1,4 @@
+(add-to-load-path ".")
 (use-modules (chickadee)
              (srfi srfi-9)
              (system repl coop-server)
