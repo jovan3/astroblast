@@ -4,8 +4,8 @@ A simple space shooter game written in [GNU Guile](https://www.gnu.org/software/
 
 ## Running the game
 
-### Requirements: GNU Guile 3, guile-chickadee: v0.6.0 or newer
-### To run the game: `guile game.scm`
+Requirements: GNU Guile 3, guile-chickadee: v0.6.0 or newer.
+To run the game: `guile game.scm`.
 
 ## Game controlls
 
